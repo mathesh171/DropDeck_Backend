@@ -1,9 +1,10 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const { generateAuthToken } = require('../utils/tokenGenerator');
-const { sendWelcomeEmail } = require('../services/emailService');
 const { HTTP_STATUS } = require('../config/constants');
 const { logger } = require('../utils/logger');
+const User = require('../models/User');
+const { sendWelcomeEmail, sendVerificationEmail } = require('../services/emailService');
 
 const register = async (req, res, next) => {
   try {
@@ -38,10 +39,13 @@ const register = async (req, res, next) => {
 
     // Send verification email
     const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
-    
-    sendVerificationEmail(email, name, verificationLink).catch((err) => {
+    sendVerificationEmail(email, name, verificationToken).catch((err) => {
       logger.error('Verification email failed:', err);
     });
+
+    // sendVerificationEmail(email, name, verificationLink).catch((err) => {
+    //   logger.error('Verification email failed:', err);
+    // });
 
     logger.info(`New user registered (unverified): ${email}`);
 
@@ -196,7 +200,9 @@ const resendVerification = async (req, res, next) => {
     // Send verification email
     const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
     
-    await sendVerificationEmail(user.email, user.name, verificationLink);
+    // await sendVerificationEmail(user.email, user.name, verificationLink);
+    await sendVerificationEmail(user.email, user.name, verificationToken);
+
 
     logger.info(`Verification email resent to: ${email}`);
 

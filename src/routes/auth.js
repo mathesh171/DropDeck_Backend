@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const { validate } = require('../middleware/validation');
-const { authValidators } = require('../utils/validators');
+const { body } = require('express-validator');
 const {
   register,
   login,
@@ -10,16 +10,34 @@ const {
   getProfile,
   updateProfile,
   changePassword,
+  deleteAccount,
+  verifyEmail,
+  resendVerification,
 } = require('../controllers/authController');
 
-router.post('/register', authValidators.register, validate, register);
-router.post('/login', authValidators.login, validate, login);
+// Registration validators
+const registerValidators = [
+  body('name').trim().isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),
+  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
+  body('password').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must be at least 8 characters with uppercase, lowercase, and number'),
+];
+
+// Login validators
+const loginValidators = [
+  body('email').isEmail().normalizeEmail(),
+  body('password').notEmpty(),
+];
+
+// Routes
+router.post('/register', registerValidators, validate, register);
+router.post('/login', loginValidators, validate, login);
 router.post('/logout', authenticateToken, logout);
 router.get('/profile', authenticateToken, getProfile);
-router.patch('/profile', authenticateToken, updateProfile);
-router.patch('/change-password', authenticateToken, changePassword);
-// router.get('/verify-email/:token', verifyEmail);
-// router.post('/resend-verification', resendVerification);
-// router.delete('/account', authenticateToken, deleteAccount);
+router.put('/profile', authenticateToken, updateProfile);
+router.put('/change-password', authenticateToken, changePassword);
+router.delete('/account', authenticateToken, deleteAccount);
+router.get('/verify-email/:token', verifyEmail);
+router.post('/resend-verification', resendVerification);
 
 module.exports = router;

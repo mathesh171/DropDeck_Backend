@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const { cleanupExpiredGroups } = require('../services/cleanupService');
 const { logger } = require('../utils/logger');
+const db = require('../config/database');
 
 const cleanupExpiredTokens = async () => {
   try {

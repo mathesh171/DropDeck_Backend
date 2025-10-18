@@ -114,9 +114,11 @@ const generateZIPExport = async (groupId, groupName) => {
       );
 
       // Add files to archive
+      const { decrypt } = require('./encryptionService');
       for (const file of files) {
-        if (fs.existsSync(file.file_path)) {
-          archive.file(file.file_path, { name: `files/${file.file_name}` });
+        const decryptedPath = decrypt(file.file_path);
+        if (fs.existsSync(decryptedPath)) {
+          archive.file(decryptedPath, { name: `files/${file.file_name}` });
         }
       }
 
