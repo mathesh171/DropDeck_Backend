@@ -1,0 +1,585 @@
+# DropDeck API Testing Guide
+
+## Quick Start Testing
+
+### 1. Start the Server
+```bash
+npm run dev
+```
+
+Server should start at `http://localhost:5000`
+
+### 2. Test Health Check
+```bash
+curl http://localhost:5000/health
+```
+
+Expected Response:
+```json
+{
+  "status": "OK",
+  "timestamp": "2025-10-18T..."
+}
+```
+
+---
+
+## Testing with cURL
+
+### Authentication Endpoints
+
+#### Register a User
+```bash
+curl -X POST http://localhost:5000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "password": "SecurePass@123"
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "User registered successfully",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "user_id": 1,
+    "name": "John Doe",
+    "email": "john@example.com",
+    "role": "member"
+  }
+}
+```
+
+#### Login
+```bash
+curl -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "password": "SecurePass@123"
+  }'
+```
+
+**Save the token from response for subsequent requests!**
+
+#### Get Profile
+```bash
+curl -X GET http://localhost:5000/api/auth/profile \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+---
+
+### Group Endpoints
+
+#### Create Group
+```bash
+curl -X POST http://localhost:5000/api/groups/create \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "group_name": "Study Group",
+    "description": "Final Exam Prep",
+    "expiry_time": "2025-12-31T23:59:59Z",
+    "access_type": "public"
+  }'
+```
+
+#### Get All User Groups
+```bash
+curl -X GET http://localhost:5000/api/groups \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+#### Get Group Details
+```bash
+curl -X GET http://localhost:5000/api/groups/1 \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+#### Invite User to Group
+```bash
+curl -X POST http://localhost:5000/api/groups/1/invite \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "email": "friend@example.com"
+  }'
+```
+
+#### Get Group Members
+```bash
+curl -X GET http://localhost:5000/api/groups/1/members \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+#### Update Member Role
+```bash
+curl -X PATCH http://localhost:5000/api/groups/1/roles \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "user_id": 2,
+    "role": "moderator"
+  }'
+```
+
+---
+
+### Message Endpoints
+
+#### Send Message
+```bash
+curl -X POST http://localhost:5000/api/messages/groups/1/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "content": "Hello everyone!",
+    "message_type": "text"
+  }'
+```
+
+#### Get Messages
+```bash
+curl -X GET "http://localhost:5000/api/messages/groups/1/messages?limit=50&offset=0" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+#### Reply to Message
+```bash
+curl -X POST http://localhost:5000/api/messages/1/reply \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "content": "Great idea!"
+  }'
+```
+
+#### Get Message Thread
+```bash
+curl -X GET http://localhost:5000/api/messages/1/thread \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+#### React to Message
+```bash
+curl -X POST http://localhost:5000/api/messages/1/react \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "reaction_type": "👍"
+  }'
+```
+
+#### Get Message Reactions
+```bash
+curl -X GET http://localhost:5000/api/messages/1/reactions \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+---
+
+### File Endpoints
+
+#### Upload File
+```bash
+curl -X POST http://localhost:5000/api/files/groups/1/files/upload \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -F "file=@/path/to/your/file.pdf"
+```
+
+#### Get Group Files
+```bash
+curl -X GET http://localhost:5000/api/files/groups/1/files \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+#### Download File
+```bash
+curl -X GET http://localhost:5000/api/files/1/download \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  --output downloaded_file.pdf
+```
+
+---
+
+### Poll Endpoints
+
+#### Create Poll
+```bash
+curl -X POST http://localhost:5000/api/polls/groups/1/polls \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "question": "What time works best for our meeting?",
+    "options": ["10 AM", "2 PM", "6 PM"]
+  }'
+```
+
+#### Vote on Poll
+```bash
+curl -X POST http://localhost:5000/api/polls/1/vote \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "option_id": 1
+  }'
+```
+
+#### Get Poll Results
+```bash
+curl -X GET http://localhost:5000/api/polls/1/results \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+#### Get Group Polls
+```bash
+curl -X GET http://localhost:5000/api/polls/groups/1/polls \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+---
+
+### Notification Endpoints
+
+#### Get Notifications
+```bash
+curl -X GET "http://localhost:5000/api/notifications?unread_only=true" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+#### Mark Notifications as Read
+```bash
+curl -X POST http://localhost:5000/api/notifications/mark-read \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "notification_ids": [1, 2, 3]
+  }'
+```
+
+#### Mark All as Read
+```bash
+curl -X POST http://localhost:5000/api/notifications/mark-all-read \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+---
+
+### Admin Endpoints (Requires Admin Role)
+
+#### Get System Stats
+```bash
+curl -X GET http://localhost:5000/api/admin/stats \
+  -H "Authorization: Bearer ADMIN_TOKEN_HERE"
+```
+
+#### Export Group Data
+```bash
+curl -X POST http://localhost:5000/api/admin/groups/1/export \
+  -H "Authorization: Bearer ADMIN_TOKEN_HERE"
+```
+
+---
+
+## Postman Collection
+
+### Import this JSON into Postman:
+
+```json
+{
+  "info": {
+    "name": "DropDeck API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set(\"token\", jsonData.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "profile"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Groups",
+      "item": [
+        {
+          "name": "Create Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_name\": \"Study Group\",\n  \"description\": \"Final Exam Prep\",\n  \"expiry_time\": \"2025-12-31T23:59:59Z\",\n  \"access_type\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/groups/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "groups", "create"]
+            }
+          }
+        },
+        {
+          "name": "Get User Groups",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/groups",
+              "host": ["{{base_url}}"],
+              "path": ["api", "groups"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## Testing Workflow
+
+### Complete Testing Sequence:
+
+1. **Register Two Users**
+   ```bash
+   # User 1
+   curl -X POST http://localhost:5000/api/auth/register \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Alice", "email": "alice@example.com", "password": "Password@123"}'
+   
+   # User 2
+   curl -X POST http://localhost:5000/api/auth/register \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Bob", "email": "bob@example.com", "password": "Password@123"}'
+   ```
+
+2. **Login as Alice (save token)**
+   ```bash
+   curl -X POST http://localhost:5000/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email": "alice@example.com", "password": "Password@123"}'
+   ```
+
+3. **Create a Group (as Alice)**
+   ```bash
+   curl -X POST http://localhost:5000/api/groups/create \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer ALICE_TOKEN" \
+     -d '{"group_name": "Team Project", "description": "Q4 Planning", "expiry_time": "2025-12-31T23:59:59Z"}'
+   ```
+
+4. **Invite Bob to Group**
+   ```bash
+   curl -X POST http://localhost:5000/api/groups/1/invite \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer ALICE_TOKEN" \
+     -d '{"email": "bob@example.com"}'
+   ```
+
+5. **Send a Message (as Alice)**
+   ```bash
+   curl -X POST http://localhost:5000/api/messages/groups/1/messages \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer ALICE_TOKEN" \
+     -d '{"content": "Welcome to the team!"}'
+   ```
+
+6. **Login as Bob and Reply**
+   ```bash
+   # Login
+   curl -X POST http://localhost:5000/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email": "bob@example.com", "password": "Password@123"}'
+   
+   # Reply
+   curl -X POST http://localhost:5000/api/messages/1/reply \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer BOB_TOKEN" \
+     -d '{"content": "Thanks for the invite!"}'
+   ```
+
+7. **Create a Poll**
+   ```bash
+   curl -X POST http://localhost:5000/api/polls/groups/1/polls \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer ALICE_TOKEN" \
+     -d '{"question": "Meeting time?", "options": ["Monday 10AM", "Tuesday 2PM", "Wednesday 4PM"]}'
+   ```
+
+8. **Vote on Poll (as Bob)**
+   ```bash
+   curl -X POST http://localhost:5000/api/polls/1/vote \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer BOB_TOKEN" \
+     -d '{"option_id": 1}'
+   ```
+
+---
+
+## Error Response Format
+
+All errors follow this format:
+
+```json
+{
+  "error": "Error message here",
+  "details": []  // Optional validation errors
+}
+```
+
+### Common Error Codes:
+- `400` - Bad Request (validation failed)
+- `401` - Unauthorized (invalid/missing token)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found
+- `409` - Conflict (duplicate entry)
+- `500` - Internal Server Error
+
+---
+
+## Environment Variables for Testing
+
+Create `.env.test`:
+
+```env
+NODE_ENV=test
+PORT=5001
+DB_NAME=dropdeck_test
+JWT_SECRET=test_secret_key
+ENCRYPTION_KEY=test_encryption_key_32_chars
+```
+
+Run tests:
+```bash
+NODE_ENV=test npm start
+```
+
+---
+
+## Tips for Testing
+
+1. **Use Postman Environment Variables** to store tokens automatically
+2. **Test error cases** - try invalid tokens, missing fields, etc.
+3. **Test permissions** - ensure non-admins can't access admin endpoints
+4. **Test expiry** - create groups with short expiry times to test cleanup
+5. **Monitor logs** - check `logs/` directory for errors
+6. **Test file uploads** - use various file types and sizes
+
+---
+
+## Debugging
+
+Enable detailed logging:
+```bash
+DEBUG=* npm run dev
+```
+
+Check MySQL queries:
+```sql
+SHOW PROCESSLIST;
+SELECT * FROM information_schema.processlist;
+```
+
+---
+
+Happy Testing! 🚀
