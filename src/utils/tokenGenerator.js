@@ -3,8 +3,13 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { JWT_SECRET, JWT_EXPIRE } = require('../config/constants');
 
+// const generateAuthToken = (userId) => {
+//   return jwt.sign({ userId }, JWT_SECRET, {
+//     expiresIn: JWT_EXPIRE,
+//   });
+// };
 const generateAuthToken = (userId) => {
-  return jwt.sign({ userId }, JWT_SECRET, {
+  return jwt.sign({ user_id: userId }, JWT_SECRET, {  // ← Change userId to user_id
     expiresIn: JWT_EXPIRE,
   });
 };

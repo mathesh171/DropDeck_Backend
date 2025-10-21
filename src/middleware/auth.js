@@ -7,6 +7,10 @@ const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
+    console.log('=== AUTH DEBUG ===');
+    console.log('Auth Header:', authHeader);
+    console.log('Token:', token);
+
     if (!token) {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
         error: 'Access token required',
@@ -14,12 +18,17 @@ const authenticateToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('Decoded Token:', decoded);
+    console.log('Looking for user_id:', decoded.user_id);
     
     // Verify user still exists
     const [users] = await db.query(
       'SELECT user_id, email, name, role FROM Users WHERE user_id = ?',
-      [decoded.userId]
+      [decoded.user_id]
     );
+
+    console.log('Users found:', users.length);
+    console.log('User data:', users[0]);
 
     if (users.length === 0) {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
@@ -30,6 +39,9 @@ const authenticateToken = async (req, res, next) => {
     req.user = users[0];
     next();
   } catch (error) {
+    console.log('Auth Error:', error.message);
+    console.log('Error name:', error.name);
+    
     if (error.name === 'JsonWebTokenError') {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
         error: 'Invalid token',
