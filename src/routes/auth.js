@@ -40,4 +40,18 @@ router.delete('/account', authenticateToken, deleteAccount);
 router.get('/verify-email/:token', verifyEmail);
 router.post('/resend-verification', resendVerification);
 
+
+router.get('/verify', authenticateToken, (req, res) => {
+  // If authenticateToken middleware passes, token is valid
+  res.status(200).json({
+    valid: true,
+    user: {
+      id: req.user.user_id,
+      username: req.user.name,
+      email: req.user.email,
+      role: req.user.role
+    }
+  });
+});
+
 module.exports = router;
