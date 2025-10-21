@@ -40,6 +40,7 @@ router.patch('/:id/extend', authenticateToken, authorizeGroupAdmin, extendGroupE
 router.delete('/:id', authenticateToken, authorizeGroupAdmin, deleteGroup);
 router.post('/:id/invite', authenticateToken, authorizeGroupAdmin, inviteValidators, validate, inviteToGroup);
 router.get('/:id/members', authenticateToken, authorizeGroupMember, getGroupMembers);
+// router.patch('/:id/roles', authenticateToken, authorizeGroupAdmin, updateMemberRole);
 router.patch('/:id/roles', authenticateToken, authorizeGroupAdmin, updateRoleValidators, validate, updateMemberRole);
 router.post('/:id/leave', authenticateToken, authorizeGroupMember, leaveGroup);
 

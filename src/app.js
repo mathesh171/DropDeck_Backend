@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 const { errorHandler } = require('./middleware/errorHandler');
 const { logger } = require('./utils/logger');
 
+
 // Routes
 const authRoutes = require('./routes/auth');
 const groupRoutes = require('./routes/groups');
@@ -14,7 +15,21 @@ const pollRoutes = require('./routes/polls');
 const notificationRoutes = require('./routes/notifications');
 const adminRoutes = require('./routes/admin');
 
+
 const app = express();
+
+
+// ✅ CORS MUST BE FIRST - before helmet and other middleware
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
 
 // Security middleware
 app.use(helmet({
@@ -26,11 +41,6 @@ app.use(helmet({
   },
 }));
 
-// CORS configuration
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-  credentials: true,
-}));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -40,9 +50,11 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
 
 // Request logging
 app.use((req, res, next) => {
@@ -50,10 +62,12 @@ app.use((req, res, next) => {
   next();
 });
 
+
 // Health check
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date() });
 });
+
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -64,12 +78,15 @@ app.use('/api/polls', pollRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
+
 // Error handler (must be last)
 app.use(errorHandler);
+
 
 module.exports = app;
