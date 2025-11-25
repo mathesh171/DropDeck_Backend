@@ -20,7 +20,7 @@ const cleanupExpiredTokens = async () => {
 
 const initCronJobs = () => {
   // Run cleanup every hour
-  cron.schedule('0 * * * *', async () => {
+  cron.schedule('* * * * *', async () => {
     logger.info('Running scheduled cleanup job...');
     try {
       await cleanupExpiredGroups();
