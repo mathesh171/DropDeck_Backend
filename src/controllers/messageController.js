@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const { encrypt, decrypt } = require('../services/encryptionService');
 const { HTTP_STATUS } = require('../config/constants');
+const { io } = require('../../server'); // Import the socket.io instance
 
 const sendMessage = async (req, res, next) => {
   try {
@@ -8,10 +9,8 @@ const sendMessage = async (req, res, next) => {
     const userId = req.user.user_id;
     const { content, message_type, reply_to } = req.body;
 
-    // Encrypt message content
     const encryptedContent = encrypt(content);
 
-    // Insert message
     const [result] = await db.query(
       `INSERT INTO Messages (group_id, user_id, content, message_type, reply_to) 
        VALUES (?, ?, ?, ?, ?)`,
@@ -20,7 +19,6 @@ const sendMessage = async (req, res, next) => {
 
     const messageId = result.insertId;
 
-    // Get the message with user info
     const [messages] = await db.query(
       `SELECT m.*, u.name, u.email 
        FROM Messages m 
@@ -32,6 +30,12 @@ const sendMessage = async (req, res, next) => {
     const message = messages[0];
     message.content = decrypt(message.content);
 
+    // Emit notification to all group members about the new message
+    const [members] = await db.query('SELECT user_id FROM GroupMembers WHERE group_id = ?', [groupId]);
+    for (const member of members) {
+      io.to(`user:${member.user_id}`).emit('groupListUpdate', { groupId });
+    }
+
     res.status(HTTP_STATUS.CREATED).json({
       message: 'Message sent successfully',
       data: message,
@@ -40,6 +44,7 @@ const sendMessage = async (req, res, next) => {
     next(error);
   }
 };
+
 
 const getMessages = async (req, res, next) => {
   try {
