@@ -1,15 +1,17 @@
-// src/services/cleanupService.js
+const path = require('path');
+const fs = require('fs');
 const db = require('../config/database');
 const { secureDelete } = require('./secureDeleteService');
 const { generateZIPExport, generateExportHash } = require('./exportService');
 const { sendExportEmail } = require('./emailService');
 const { logger } = require('../utils/logger');
 
+const uploadDir = process.env.UPLOAD_PATH || path.join(__dirname, '..', 'uploads');
+
 const cleanupExpiredGroups = async () => {
   try {
     logger.info('Starting cleanup of expired groups...');
 
-    // Find expired groups (correct table: chat_groups)
     const [expiredGroups] = await db.query(
       `SELECT g.*, u.email, u.name 
        FROM chat_groups g 
@@ -21,7 +23,6 @@ const cleanupExpiredGroups = async () => {
       try {
         logger.info(`Processing expired group: ${group.group_name}`);
 
-        // 1️⃣ Generate full export ZIP
         const exportPath = await generateZIPExport(group.group_id, group.group_name);
         const hashValue = generateExportHash(exportPath);
 
@@ -30,7 +31,6 @@ const cleanupExpiredGroups = async () => {
           [group.group_id, exportPath, hashValue]
         );
 
-        // 2️⃣ Send export to all members
         const [members] = await db.query(
           `SELECT u.email, u.name 
            FROM GroupMembers gm 
@@ -43,7 +43,6 @@ const cleanupExpiredGroups = async () => {
           await sendExportEmail(member.email, group.group_name, exportPath);
         }
 
-        // 3️⃣ Secure delete all files
         const [files] = await db.query(
           `SELECT f.file_path 
            FROM Files f 
@@ -56,14 +55,18 @@ const cleanupExpiredGroups = async () => {
           await secureDelete(file.file_path);
         }
 
-        // 4️⃣ Delete messages manually (extra safety, though cascade is enough)
         await db.query(`DELETE FROM Messages WHERE group_id = ?`, [group.group_id]);
 
-        // 5️⃣ Finally delete the group (correct table chat_groups)
+        if (group.group_image) {
+          const imagePath = path.join(uploadDir, group.group_image);
+          if (fs.existsSync(imagePath)) {
+            fs.unlinkSync(imagePath);
+          }
+        }
+
         await db.query(`DELETE FROM chat_groups WHERE group_id = ?`, [group.group_id]);
 
         logger.info(`Cleaned up group: ${group.group_name} (ID: ${group.group_id})`);
-
       } catch (err) {
         logger.error(`Failed to cleanup group ${group.group_id}:`, err);
       }
