@@ -36,9 +36,15 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "http://localhost:5000"],
+      mediaSrc: ["'self'", "http://localhost:5000"],
+      connectSrc: ["'self'", "http://localhost:5000", "http://localhost:5173"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-    },
-  },
+      fontSrc: ["'self'", "data:"],
+      frameSrc: ["'self'"]
+    }
+  }
 }));
 
 
@@ -54,6 +60,16 @@ app.use('/api/', limiter);
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+const path = require('path');
+
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  setHeaders: (res) => {
+    res.setHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
+}));
+
 
 
 // Request logging
