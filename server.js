@@ -12,7 +12,11 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://dropdeck-chat.vercel.app'
+    ],
     methods: ['GET', 'POST']
   }
 });
@@ -31,6 +35,7 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   initCronJobs();
+  logger.info(`Server running on port ${PORT}`);
 });
 
 process.on('SIGTERM', () => {
@@ -39,6 +44,6 @@ process.on('SIGTERM', () => {
   });
 });
 
-process.on('unhandledRejection', (err) => {
+process.on('unhandledRejection', () => {
   server.close(() => process.exit(1));
 });
