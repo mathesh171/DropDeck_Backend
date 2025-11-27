@@ -4,6 +4,29 @@ const { upload } = require('../middleware/upload');
 const { authenticateToken, authorizeGroupMember, authorizeGroupAdmin } = require('../middleware/auth');
 const { validate } = require('../middleware/validation');
 const { body } = require('express-validator');
+const db = require('../config/database');
+
+router.get('/discover', authenticateToken, async (req, res, next) => {
+  try {
+    const userId = req.user.user_id;
+
+    const [groups] = await db.query(
+      `SELECT g.*
+       FROM chat_groups g
+       WHERE g.group_id NOT IN (
+         SELECT group_id FROM groupmembers WHERE user_id = ?
+       )
+       AND (g.access_type = 'public' OR g.access_type = 'approval')
+       AND g.expiry_time > NOW()
+       ORDER BY g.created_at DESC`,
+      [userId]
+    );
+
+    res.status(200).json({ groups });
+  } catch (error) {
+    next(error);
+  }
+});
 
 const {
   createGroup,
@@ -14,7 +37,8 @@ const {
   inviteToGroup,
   getGroupMembers,
   updateMemberRole,
-  leaveGroup
+  leaveGroup,
+  joinPublicGroup
 } = require('../controllers/groupController');
 
 const createGroupValidators = [
@@ -33,5 +57,6 @@ router.post('/:id/invite', authenticateToken, authorizeGroupAdmin, body('email')
 router.get('/:id/members', authenticateToken, authorizeGroupMember, getGroupMembers);
 router.patch('/:id/roles', authenticateToken, authorizeGroupAdmin, body('user_id').isInt(), body('role').isIn(['admin', 'moderator', 'member']), validate, updateMemberRole);
 router.post('/:id/leave', authenticateToken, authorizeGroupMember, leaveGroup);
+router.post('/:id/join', authenticateToken, joinPublicGroup);
 
 module.exports = router;

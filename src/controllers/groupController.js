@@ -9,25 +9,25 @@ const { sendGroupInviteEmail } = require('../services/emailService');
 const { createNotification } = require('./notificationController');
 const { HTTP_STATUS } = require('../config/constants');
 const { logger } = require('../utils/logger');
+const db = require('../config/database');
 
-// Upload directory (same as in multer config)
 const uploadDir = process.env.UPLOAD_PATH || './uploads';
 
-
-// ---------------------------------------------------------
-// CREATE GROUP (WITH IMAGE UPLOAD)
-// ---------------------------------------------------------
 const createGroup = async (req, res, next) => {
   try {
     const { group_name, description, expiry_time, access_type } = req.body;
     const createdBy = req.user.user_id;
 
     const expiryDate = new Date(expiry_time);
-    if (expiryDate <= new Date()) return res.status(400).json({ error: 'Expiry time must be in the future' });
+    if (expiryDate <= new Date()) {
+      return res.status(400).json({ error: 'Expiry time must be in the future' });
+    }
 
     const oneYear = new Date();
     oneYear.setFullYear(oneYear.getFullYear() + 1);
-    if (expiryDate > oneYear) return res.status(400).json({ error: 'Expiry time cannot exceed 1 year' });
+    if (expiryDate > oneYear) {
+      return res.status(400).json({ error: 'Expiry time cannot exceed 1 year' });
+    }
 
     const groupImage = req.file ? req.file.filename : null;
 
@@ -50,12 +50,6 @@ const createGroup = async (req, res, next) => {
   }
 };
 
-
-
-
-// ---------------------------------------------------------
-// GET USER GROUPS
-// ---------------------------------------------------------
 const getUserGroups = async (req, res, next) => {
   try {
     const userId = req.user.user_id;
@@ -67,25 +61,20 @@ const getUserGroups = async (req, res, next) => {
   }
 };
 
-
-// ---------------------------------------------------------
-// GET GROUP DETAILS
-// ---------------------------------------------------------
 const getGroupDetails = async (req, res, next) => {
   try {
     const groupId = req.params.id;
     const group = await Group.findById(groupId);
 
     if (!group) {
-      return res.status(HTTP_STATUS.NOT_FOUND)
-        .json({ error: 'Group not found' });
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Group not found' });
     }
 
     const stats = await Group.getGroupStats(groupId);
     const role = await GroupMember.getRole(groupId, req.user.user_id);
 
     res.status(HTTP_STATUS.OK).json({
-      group: { ...group, statistics: stats, user_role: role },
+      group: { ...group, statistics: stats, user_role: role }
     });
   } catch (error) {
     logger.error('Get group details error:', error);
@@ -93,10 +82,6 @@ const getGroupDetails = async (req, res, next) => {
   }
 };
 
-
-// ---------------------------------------------------------
-// EXTEND GROUP EXPIRY
-// ---------------------------------------------------------
 const extendGroupExpiry = async (req, res, next) => {
   try {
     const groupId = req.params.id;
@@ -105,19 +90,20 @@ const extendGroupExpiry = async (req, res, next) => {
     const newExpiry = new Date(new_expiry_time);
 
     if (newExpiry <= new Date()) {
-      return res.status(HTTP_STATUS.BAD_REQUEST)
-        .json({ error: 'New expiry time must be in the future' });
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: 'New expiry time must be in the future'
+      });
     }
 
     const group = await Group.findById(groupId);
     if (!group) {
-      return res.status(HTTP_STATUS.NOT_FOUND)
-        .json({ error: 'Group not found' });
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Group not found' });
     }
 
     if (newExpiry <= new Date(group.expiry_time)) {
-      return res.status(HTTP_STATUS.BAD_REQUEST)
-        .json({ error: 'New expiry must be after current expiry' });
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: 'New expiry must be after current expiry'
+      });
     }
 
     await Group.extendExpiry(groupId, new_expiry_time);
@@ -136,7 +122,7 @@ const extendGroupExpiry = async (req, res, next) => {
 
     res.status(HTTP_STATUS.OK).json({
       message: 'Group expiry extended successfully',
-      new_expiry_time,
+      new_expiry_time
     });
   } catch (error) {
     logger.error('Extend group expiry error:', error);
@@ -144,30 +130,23 @@ const extendGroupExpiry = async (req, res, next) => {
   }
 };
 
-
-// ---------------------------------------------------------
-// DELETE GROUP (ALSO DELETE STORED IMAGE)
-// ---------------------------------------------------------
 const deleteGroup = async (req, res, next) => {
   try {
     const groupId = req.params.id;
 
     const group = await Group.findById(groupId);
     if (!group) {
-      return res.status(HTTP_STATUS.NOT_FOUND)
-        .json({ error: 'Group not found' });
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Group not found' });
     }
 
-    // Delete image file if exists
     if (group.group_image) {
       const imagePath = path.join(uploadDir, group.group_image);
       if (fs.existsSync(imagePath)) {
         fs.unlinkSync(imagePath);
-        console.log("Group image deleted:", group.group_image);
+        console.log('Group image deleted:', group.group_image);
       }
     }
 
-    // Remove group from DB
     await Group.delete(groupId);
 
     logger.info(`Group deleted: ${groupId} by ${req.user.email}`);
@@ -179,10 +158,6 @@ const deleteGroup = async (req, res, next) => {
   }
 };
 
-
-// ---------------------------------------------------------
-// INVITE USER
-// ---------------------------------------------------------
 const inviteToGroup = async (req, res, next) => {
   try {
     const groupId = req.params.id;
@@ -190,20 +165,19 @@ const inviteToGroup = async (req, res, next) => {
 
     const user = await User.findByEmail(email);
     if (!user) {
-      return res.status(HTTP_STATUS.NOT_FOUND)
-        .json({ error: 'User not found' });
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'User not found' });
     }
 
     const isMember = await GroupMember.isMember(groupId, user.user_id);
     if (isMember) {
-      return res.status(HTTP_STATUS.CONFLICT)
-        .json({ error: 'User already a member' });
+      return res.status(HTTP_STATUS.CONFLICT).json({ error: 'User already a member' });
     }
 
     const inviterRole = await GroupMember.getRole(groupId, req.user.user_id);
     if (!['admin', 'moderator'].includes(inviterRole)) {
-      return res.status(HTTP_STATUS.FORBIDDEN)
-        .json({ error: 'Only admins/moderators can invite' });
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        error: 'Only admins/moderators can invite'
+      });
     }
 
     await GroupMember.add(groupId, user.user_id, 'member');
@@ -216,10 +190,6 @@ const inviteToGroup = async (req, res, next) => {
   }
 };
 
-
-// ---------------------------------------------------------
-// GET GROUP MEMBERS
-// ---------------------------------------------------------
 const getGroupMembers = async (req, res, next) => {
   try {
     const groupId = req.params.id;
@@ -231,10 +201,6 @@ const getGroupMembers = async (req, res, next) => {
   }
 };
 
-
-// ---------------------------------------------------------
-// UPDATE MEMBER ROLE
-// ---------------------------------------------------------
 const updateMemberRole = async (req, res, next) => {
   try {
     const groupId = req.params.id;
@@ -243,7 +209,7 @@ const updateMemberRole = async (req, res, next) => {
     await GroupMember.updateRole(groupId, user_id, role);
 
     res.status(HTTP_STATUS.OK).json({
-      message: 'Member role updated successfully',
+      message: 'Member role updated successfully'
     });
   } catch (error) {
     logger.error('Update member role error:', error);
@@ -251,10 +217,6 @@ const updateMemberRole = async (req, res, next) => {
   }
 };
 
-
-// ---------------------------------------------------------
-// LEAVE GROUP
-// ---------------------------------------------------------
 const leaveGroup = async (req, res, next) => {
   try {
     const groupId = req.params.id;
@@ -269,6 +231,54 @@ const leaveGroup = async (req, res, next) => {
   }
 };
 
+const joinPublicGroup = async (req, res, next) => {
+  try {
+    const groupId = parseInt(req.params.id, 10);
+    const userId = req.user.user_id;
+
+    const [rows] = await db.query(
+      'SELECT access_type, expiry_time FROM chat_groups WHERE group_id = ?',
+      [groupId]
+    );
+    if (rows.length === 0) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Group not found' });
+    }
+
+    const group = rows[0];
+
+    if (group.access_type !== 'public') {
+      return res
+        .status(HTTP_STATUS.FORBIDDEN)
+        .json({ error: 'Only public groups can be joined directly' });
+    }
+
+    if (new Date(group.expiry_time) <= new Date()) {
+      return res
+        .status(HTTP_STATUS.BAD_REQUEST)
+        .json({ error: 'Group has expired' });
+    }
+
+    const [existing] = await db.query(
+      'SELECT id FROM groupmembers WHERE group_id = ? AND user_id = ?',
+      [groupId, userId]
+    );
+    if (existing.length > 0) {
+      return res
+        .status(HTTP_STATUS.BAD_REQUEST)
+        .json({ error: 'You are already a member of this group' });
+    }
+
+    await db.query(
+      'INSERT INTO groupmembers (group_id, user_id, role) VALUES (?, ?, ?)',
+      [groupId, userId, 'member']
+    );
+
+    res.status(HTTP_STATUS.OK).json({ message: 'Joined group successfully' });
+  } catch (error) {
+    logger.error('Join public group error:', error);
+    next(error);
+  }
+};
 
 module.exports = {
   createGroup,
@@ -280,4 +290,5 @@ module.exports = {
   getGroupMembers,
   updateMemberRole,
   leaveGroup,
+  joinPublicGroup
 };
