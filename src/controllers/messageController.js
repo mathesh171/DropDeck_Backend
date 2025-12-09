@@ -1,6 +1,6 @@
 const db = require('../config/database');
 const { encrypt, decrypt } = require('../services/encryptionService');
-const { HTTP_STATUS } = require('../config/constants');
+const HTTP_STATUS = require('../config/constants').HTTP_STATUS;
 
 const sendMessage = async (req, res, next) => {
   try {
@@ -11,31 +11,36 @@ const sendMessage = async (req, res, next) => {
     const encryptedContent = encrypt(content);
 
     const [result] = await db.query(
-      `INSERT INTO Messages (group_id, user_id, content, message_type, reply_to) 
+      `INSERT INTO messages (group_id, user_id, content, message_type, reply_to) 
        VALUES (?, ?, ?, ?, ?)`,
       [groupId, userId, encryptedContent, message_type || 'text', reply_to || null]
     );
 
     const messageId = result.insertId;
 
-    const [messages] = await db.query(
-      `SELECT m.*, u.name, u.email 
-       FROM Messages m 
-       JOIN Users u ON m.user_id = u.user_id 
+    await db.query(
+      'UPDATE groupmembers SET last_read_at = NOW() WHERE group_id = ? AND user_id = ?',
+      [groupId, userId]
+    );
+
+    const [rows] = await db.query(
+      `SELECT m.*, u.name AS user_name 
+       FROM messages m 
+       JOIN users u ON m.user_id = u.user_id 
        WHERE m.message_id = ?`,
       [messageId]
     );
-
-    const message = messages[0];
+    const message = rows[0];
     message.content = decrypt(message.content);
 
     const [members] = await db.query(
-      'SELECT user_id FROM GroupMembers WHERE group_id = ?',
+      'SELECT user_id FROM groupmembers WHERE group_id = ?',
       [groupId]
     );
 
     for (const member of members) {
       global.io.to(`user:${member.user_id}`).emit('groupListUpdate', { groupId });
+      global.io.to(`user:${member.user_id}`).emit('notificationUpdate', { groupId });
     }
 
     global.io.to(`group:${groupId}`).emit('newMessage', message);
@@ -44,8 +49,24 @@ const sendMessage = async (req, res, next) => {
       message: 'Message sent successfully',
       data: message
     });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+const markGroupRead = async (req, res, next) => {
+  try {
+    const groupId = req.params.id;
+    const userId = req.user.user_id;
+    await db.query(
+      'UPDATE groupmembers SET last_read_at = NOW() WHERE group_id = ? AND user_id = ?',
+      [groupId, userId]
+    );
+    global.io.to(`user:${userId}`).emit('groupListUpdate', { groupId });
+    res.status(200).json({ message: 'Group marked as read' });
+  } catch (err) {
+    next(err);
   }
 };
 
@@ -56,15 +77,15 @@ const getMessages = async (req, res, next) => {
 
     const [messages] = await db.query(
       `SELECT m.*, u.name, u.email 
-       FROM Messages m 
-       JOIN Users u ON m.user_id = u.user_id 
+       FROM messages m 
+       JOIN users u ON m.user_id = u.user_id 
        WHERE m.group_id = ? 
        ORDER BY m.created_at DESC 
        LIMIT ? OFFSET ?`,
       [groupId, parseInt(limit), parseInt(offset)]
     );
 
-    const decryptedMessages = messages.map((msg) => ({
+    const decryptedMessages = messages.map(msg => ({
       ...msg,
       content: msg.content ? decrypt(msg.content) : null
     }));
@@ -86,7 +107,7 @@ const replyToMessage = async (req, res, next) => {
     const { content } = req.body;
 
     const [originalMessages] = await db.query(
-      'SELECT group_id FROM Messages WHERE message_id = ?',
+      'SELECT group_id FROM messages WHERE message_id = ?',
       [messageId]
     );
 
@@ -100,7 +121,7 @@ const replyToMessage = async (req, res, next) => {
     const encryptedContent = encrypt(content);
 
     const [result] = await db.query(
-      `INSERT INTO Messages (group_id, user_id, content, message_type, reply_to) 
+      `INSERT INTO messages (group_id, user_id, content, message_type, reply_to) 
        VALUES (?, ?, ?, ?, ?)`,
       [groupId, userId, encryptedContent, 'reply', messageId]
     );
@@ -109,8 +130,8 @@ const replyToMessage = async (req, res, next) => {
 
     const [replies] = await db.query(
       `SELECT m.*, u.name, u.email 
-       FROM Messages m 
-       JOIN Users u ON m.user_id = u.user_id 
+       FROM messages m 
+       JOIN users u ON m.user_id = u.user_id 
        WHERE m.message_id = ?`,
       [replyId]
     );
@@ -133,14 +154,14 @@ const getMessageThread = async (req, res, next) => {
 
     const [replies] = await db.query(
       `SELECT m.*, u.name, u.email 
-       FROM Messages m 
-       JOIN Users u ON m.user_id = u.user_id 
+       FROM messages m 
+       JOIN users u ON m.user_id = u.user_id 
        WHERE m.reply_to = ? 
        ORDER BY m.created_at ASC`,
       [messageId]
     );
 
-    const decryptedReplies = replies.map((msg) => ({
+    const decryptedReplies = replies.map(msg => ({
       ...msg,
       content: decrypt(msg.content)
     }));
@@ -160,18 +181,18 @@ const reactToMessage = async (req, res, next) => {
     const { reaction_type } = req.body;
 
     const [existing] = await db.query(
-      'SELECT reaction_id FROM Reactions WHERE message_id = ? AND user_id = ?',
+      'SELECT reaction_id FROM reactions WHERE message_id = ? AND user_id = ?',
       [messageId, userId]
     );
 
     if (existing.length > 0) {
       await db.query(
-        'UPDATE Reactions SET reaction_type = ? WHERE reaction_id = ?',
+        'UPDATE reactions SET reaction_type = ? WHERE reaction_id = ?',
         [reaction_type, existing[0].reaction_id]
       );
     } else {
       await db.query(
-        'INSERT INTO Reactions (message_id, user_id, reaction_type) VALUES (?, ?, ?)',
+        'INSERT INTO reactions (message_id, user_id, reaction_type) VALUES (?, ?, ?)',
         [messageId, userId, reaction_type]
       );
     }
@@ -190,7 +211,7 @@ const removeReaction = async (req, res, next) => {
     const userId = req.user.user_id;
 
     await db.query(
-      'DELETE FROM Reactions WHERE message_id = ? AND user_id = ?',
+      'DELETE FROM reactions WHERE message_id = ? AND user_id = ?',
       [messageId, userId]
     );
 
@@ -208,8 +229,8 @@ const getMessageReactions = async (req, res, next) => {
 
     const [reactions] = await db.query(
       `SELECT r.*, u.name 
-       FROM Reactions r 
-       JOIN Users u ON r.user_id = u.user_id 
+       FROM reactions r 
+       JOIN users u ON r.user_id = u.user_id 
        WHERE r.message_id = ?`,
       [messageId]
     );
@@ -228,7 +249,7 @@ const deleteMessage = async (req, res, next) => {
     const userId = req.user.user_id;
 
     const [messages] = await db.query(
-      'SELECT user_id, group_id FROM Messages WHERE message_id = ?',
+      'SELECT user_id, group_id FROM messages WHERE message_id = ?',
       [messageId]
     );
 
@@ -241,7 +262,7 @@ const deleteMessage = async (req, res, next) => {
     const message = messages[0];
 
     const [members] = await db.query(
-      'SELECT role FROM GroupMembers WHERE group_id = ? AND user_id = ?',
+      'SELECT role FROM groupmembers WHERE group_id = ? AND user_id = ?',
       [message.group_id, userId]
     );
 
@@ -254,7 +275,7 @@ const deleteMessage = async (req, res, next) => {
       });
     }
 
-    await db.query('DELETE FROM Messages WHERE message_id = ?', [messageId]);
+    await db.query('DELETE FROM messages WHERE message_id = ?', [messageId]);
 
     res.status(HTTP_STATUS.OK).json({
       message: 'Message deleted successfully'
@@ -266,6 +287,7 @@ const deleteMessage = async (req, res, next) => {
 
 module.exports = {
   sendMessage,
+  markGroupRead,
   getMessages,
   replyToMessage,
   getMessageThread,
