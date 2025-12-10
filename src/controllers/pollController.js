@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { HTTP_STATUS } = require('../config/constants');
+const { Poll, PollOption, PollVote } = require('../models/Poll');
 
 const createPoll = async (req, res, next) => {
   try {
@@ -7,42 +8,29 @@ const createPoll = async (req, res, next) => {
     const userId = req.user.user_id;
     const { question, options } = req.body;
 
-    // Create poll
-    const [pollResult] = await db.query(
-      'INSERT INTO Polls (group_id, question, created_by) VALUES (?, ?, ?)',
-      [groupId, question, userId]
-    );
-
-    const pollId = pollResult.insertId;
-
-    // Insert poll options
-    for (const option of options) {
-      await db.query(
-        'INSERT INTO PollOptions (poll_id, option_text) VALUES (?, ?)',
-        [pollId, option]
-      );
+    if (!question || !Array.isArray(options) || options.length < 2) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: 'Question and at least two options are required'
+      });
     }
 
-    // Get created poll with options
-    const [polls] = await db.query(
-      `SELECT p.*, u.name as creator_name 
-       FROM Polls p 
-       JOIN Users u ON p.created_by = u.user_id 
-       WHERE p.poll_id = ?`,
-      [pollId]
-    );
+    const pollId = await Poll.create({
+      group_id: groupId,
+      question,
+      created_by: userId
+    });
 
-    const [pollOptions] = await db.query(
-      'SELECT * FROM PollOptions WHERE poll_id = ?',
-      [pollId]
-    );
+    for (const option of options) {
+      if (option && option.trim()) {
+        await PollOption.create(pollId, option.trim());
+      }
+    }
+
+    const poll = await Poll.getWithOptions(pollId, userId);
 
     res.status(HTTP_STATUS.CREATED).json({
       message: 'Poll created successfully',
-      poll: {
-        ...polls[0],
-        options: pollOptions,
-      },
+      poll
     });
   } catch (error) {
     next(error);
@@ -55,28 +43,29 @@ const voteOnPoll = async (req, res, next) => {
     const userId = req.user.user_id;
     const { option_id } = req.body;
 
-    // Check if user already voted
-    const [existingVotes] = await db.query(
-      'SELECT vote_id FROM PollVotes WHERE poll_id = ? AND user_id = ?',
-      [pollId, userId]
-    );
-
-    if (existingVotes.length > 0) {
-      // Update existing vote
-      await db.query(
-        'UPDATE PollVotes SET option_id = ? WHERE vote_id = ?',
-        [option_id, existingVotes[0].vote_id]
-      );
-    } else {
-      // Create new vote
-      await db.query(
-        'INSERT INTO PollVotes (poll_id, option_id, user_id) VALUES (?, ?, ?)',
-        [pollId, option_id, userId]
-      );
+    if (!option_id) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: 'option_id is required'
+      });
     }
+
+    const [options] = await db.query(
+      'SELECT option_id FROM PollOptions WHERE option_id = ? AND poll_id = ?',
+      [option_id, pollId]
+    );
+    if (options.length === 0) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: 'Option not found for this poll'
+      });
+    }
+
+    await PollVote.vote(pollId, option_id, userId);
+
+    const poll = await Poll.getWithOptions(pollId, userId);
 
     res.status(HTTP_STATUS.OK).json({
       message: 'Vote recorded successfully',
+      poll
     });
   } catch (error) {
     next(error);
@@ -86,28 +75,9 @@ const voteOnPoll = async (req, res, next) => {
 const getGroupPolls = async (req, res, next) => {
   try {
     const groupId = req.params.id;
-
-    const [polls] = await db.query(
-      `SELECT p.*, u.name as creator_name 
-       FROM Polls p 
-       JOIN Users u ON p.created_by = u.user_id 
-       WHERE p.group_id = ? 
-       ORDER BY p.created_at DESC`,
-      [groupId]
-    );
-
-    // Get options for each poll
-    for (let poll of polls) {
-      const [options] = await db.query(
-        'SELECT * FROM PollOptions WHERE poll_id = ?',
-        [poll.poll_id]
-      );
-      poll.options = options;
-    }
-
-    res.status(HTTP_STATUS.OK).json({
-      polls,
-    });
+    const userId = req.user.user_id;
+    const polls = await Poll.getByGroupId(groupId, userId);
+    res.status(HTTP_STATUS.OK).json({ polls });
   } catch (error) {
     next(error);
   }
@@ -116,42 +86,19 @@ const getGroupPolls = async (req, res, next) => {
 const getPollResults = async (req, res, next) => {
   try {
     const pollId = req.params.poll_id;
+    const userId = req.user.user_id;
+    const poll = await Poll.getWithOptions(pollId, userId);
 
-    // Get poll details
-    const [polls] = await db.query(
-      `SELECT p.*, u.name as creator_name 
-       FROM Polls p 
-       JOIN Users u ON p.created_by = u.user_id 
-       WHERE p.poll_id = ?`,
-      [pollId]
-    );
-
-    if (polls.length === 0) {
+    if (!poll) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
-        error: 'Poll not found',
+        error: 'Poll not found'
       });
     }
 
-    // Get options with vote counts
-    const [options] = await db.query(
-      `SELECT po.*, COUNT(pv.vote_id) as vote_count 
-       FROM PollOptions po 
-       LEFT JOIN PollVotes pv ON po.option_id = pv.option_id 
-       WHERE po.poll_id = ? 
-       GROUP BY po.option_id`,
-      [pollId]
-    );
-
-    // Get total votes
-    const [totalVotes] = await db.query(
-      'SELECT COUNT(*) as total FROM PollVotes WHERE poll_id = ?',
-      [pollId]
-    );
-
     res.status(HTTP_STATUS.OK).json({
-      poll: polls[0],
-      options,
-      total_votes: totalVotes[0].total,
+      poll,
+      options: poll.options,
+      total_votes: poll.total_votes
     });
   } catch (error) {
     next(error);
@@ -163,7 +110,6 @@ const deletePoll = async (req, res, next) => {
     const pollId = req.params.poll_id;
     const userId = req.user.user_id;
 
-    // Check if user created the poll or is admin
     const [polls] = await db.query(
       'SELECT created_by, group_id FROM Polls WHERE poll_id = ?',
       [pollId]
@@ -171,13 +117,12 @@ const deletePoll = async (req, res, next) => {
 
     if (polls.length === 0) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
-        error: 'Poll not found',
+        error: 'Poll not found'
       });
     }
 
     const poll = polls[0];
 
-    // Check permissions
     const [members] = await db.query(
       'SELECT role FROM GroupMembers WHERE group_id = ? AND user_id = ?',
       [poll.group_id, userId]
@@ -188,15 +133,14 @@ const deletePoll = async (req, res, next) => {
 
     if (!isCreator && !isAdmin) {
       return res.status(HTTP_STATUS.FORBIDDEN).json({
-        error: 'You do not have permission to delete this poll',
+        error: 'You do not have permission to delete this poll'
       });
     }
 
-    // Delete poll (cascade will handle options and votes)
     await db.query('DELETE FROM Polls WHERE poll_id = ?', [pollId]);
 
     res.status(HTTP_STATUS.OK).json({
-      message: 'Poll deleted successfully',
+      message: 'Poll deleted successfully'
     });
   } catch (error) {
     next(error);
@@ -208,5 +152,5 @@ module.exports = {
   voteOnPoll,
   getGroupPolls,
   getPollResults,
-  deletePoll,
+  deletePoll
 };

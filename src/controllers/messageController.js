@@ -13,7 +13,7 @@ const sendMessage = async (req, res, next) => {
     const encryptedContent = rawContent ? encrypt(rawContent) : null;
 
     const [result] = await db.query(
-      `INSERT INTO messages (group_id, user_id, content, message_type, reply_to) 
+      `INSERT INTO messages (group_id, user_id, content, message_type, reply_to)
        VALUES (?, ?, ?, ?, ?)`,
       [groupId, userId, encryptedContent, message_type || 'text', reply_to || null]
     );
@@ -137,7 +137,7 @@ const replyToMessage = async (req, res, next) => {
     const encryptedContent = encrypt(content);
 
     const [result] = await db.query(
-      `INSERT INTO messages (group_id, user_id, content, message_type, reply_to) 
+      `INSERT INTO messages (group_id, user_id, content, message_type, reply_to)
        VALUES (?, ?, ?, ?, ?)`,
       [groupId, userId, encryptedContent, 'reply', messageId]
     );
@@ -145,9 +145,9 @@ const replyToMessage = async (req, res, next) => {
     const replyId = result.insertId;
 
     const [replies] = await db.query(
-      `SELECT m.*, u.name, u.email 
-       FROM messages m 
-       JOIN users u ON m.user_id = u.user_id 
+      `SELECT m.*, u.name, u.email
+       FROM messages m
+       JOIN users u ON m.user_id = u.user_id
        WHERE m.message_id = ?`,
       [replyId]
     );
@@ -169,10 +169,10 @@ const getMessageThread = async (req, res, next) => {
     const messageId = req.params.id;
 
     const [replies] = await db.query(
-      `SELECT m.*, u.name, u.email 
-       FROM messages m 
-       JOIN users u ON m.user_id = u.user_id 
-       WHERE m.reply_to = ? 
+      `SELECT m.*, u.name, u.email
+       FROM messages m
+       JOIN users u ON m.user_id = u.user_id
+       WHERE m.reply_to = ?
        ORDER BY m.created_at ASC`,
       [messageId]
     );
@@ -244,9 +244,9 @@ const getMessageReactions = async (req, res, next) => {
     const messageId = req.params.id;
 
     const [reactions] = await db.query(
-      `SELECT r.*, u.name 
-       FROM reactions r 
-       JOIN users u ON r.user_id = u.user_id 
+      `SELECT r.*, u.name
+       FROM reactions r
+       JOIN users u ON r.user_id = u.user_id
        WHERE r.message_id = ?`,
       [messageId]
     );
