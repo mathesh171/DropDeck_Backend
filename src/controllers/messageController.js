@@ -6,9 +6,12 @@ const sendMessage = async (req, res, next) => {
   try {
     const groupId = req.params.id;
     const userId = req.user.user_id;
-    const { content, message_type, reply_to } = req.body;
+    const { content, message_type, reply_to, file_name } = req.body;
 
-    const encryptedContent = encrypt(content);
+    const isFile = message_type === 'file';
+    const rawContent = isFile ? file_name || content || '' : content || '';
+
+    const encryptedContent = rawContent ? encrypt(rawContent) : null;
 
     const [result] = await db.query(
       `INSERT INTO messages (group_id, user_id, content, message_type, reply_to) 
@@ -30,8 +33,13 @@ const sendMessage = async (req, res, next) => {
        WHERE m.message_id = ?`,
       [messageId]
     );
+
     const message = rows[0];
-    message.content = decrypt(message.content);
+    message.content = message.content ? decrypt(message.content) : null;
+
+    if (message.message_type === 'file') {
+      message.file_name = message.content;
+    }
 
     const [members] = await db.query(
       'SELECT user_id FROM groupmembers WHERE group_id = ?',
@@ -53,7 +61,6 @@ const sendMessage = async (req, res, next) => {
     next(err);
   }
 };
-
 
 const markGroupRead = async (req, res, next) => {
   try {
@@ -77,18 +84,22 @@ const getMessages = async (req, res, next) => {
 
     const [messages] = await db.query(
       `SELECT m.*, u.name, u.email 
-       FROM messages m 
-       JOIN users u ON m.user_id = u.user_id 
-       WHERE m.group_id = ? 
-       ORDER BY m.created_at DESC 
-       LIMIT ? OFFSET ?`,
+      FROM messages m 
+      JOIN users u ON m.user_id = u.user_id 
+      WHERE m.group_id = ? 
+      ORDER BY m.created_at DESC 
+      LIMIT ? OFFSET ?`,
       [groupId, parseInt(limit), parseInt(offset)]
     );
 
-    const decryptedMessages = messages.map(msg => ({
-      ...msg,
-      content: msg.content ? decrypt(msg.content) : null
-    }));
+    const decryptedMessages = messages.map(msg => {
+      const content = msg.content ? decrypt(msg.content) : null;
+      return {
+        ...msg,
+        content,
+        file_name: msg.message_type === 'file' ? content : null
+      };
+    });
 
     res.status(HTTP_STATUS.OK).json({
       messages: decryptedMessages,
