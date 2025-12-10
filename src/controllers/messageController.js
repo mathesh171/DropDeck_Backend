@@ -10,7 +10,6 @@ const sendMessage = async (req, res, next) => {
 
     const isFile = message_type === 'file';
     const rawContent = isFile ? file_name || content || '' : content || '';
-
     const encryptedContent = rawContent ? encrypt(rawContent) : null;
 
     const [result] = await db.query(
@@ -27,9 +26,11 @@ const sendMessage = async (req, res, next) => {
     );
 
     const [rows] = await db.query(
-      `SELECT m.*, u.name AS user_name 
-       FROM messages m 
-       JOIN users u ON m.user_id = u.user_id 
+      `SELECT m.*, u.name AS user_name,
+              f.file_id, f.file_name AS db_file_name
+       FROM messages m
+       JOIN users u ON m.user_id = u.user_id
+       LEFT JOIN files f ON f.message_id = m.message_id
        WHERE m.message_id = ?`,
       [messageId]
     );
@@ -38,7 +39,7 @@ const sendMessage = async (req, res, next) => {
     message.content = message.content ? decrypt(message.content) : null;
 
     if (message.message_type === 'file') {
-      message.file_name = message.content;
+      message.file_name = message.content || message.db_file_name || null;
     }
 
     const [members] = await db.query(
@@ -83,21 +84,25 @@ const getMessages = async (req, res, next) => {
     const { limit = 50, offset = 0 } = req.query;
 
     const [messages] = await db.query(
-      `SELECT m.*, u.name, u.email 
-      FROM messages m 
-      JOIN users u ON m.user_id = u.user_id 
-      WHERE m.group_id = ? 
-      ORDER BY m.created_at DESC 
-      LIMIT ? OFFSET ?`,
+      `SELECT m.*, u.name, u.email,
+              f.file_id, f.file_name AS db_file_name
+       FROM messages m
+       JOIN users u ON m.user_id = u.user_id
+       LEFT JOIN files f ON f.message_id = m.message_id
+       WHERE m.group_id = ?
+       ORDER BY m.created_at DESC
+       LIMIT ? OFFSET ?`,
       [groupId, parseInt(limit), parseInt(offset)]
     );
 
     const decryptedMessages = messages.map(msg => {
       const content = msg.content ? decrypt(msg.content) : null;
+      const isFile = msg.message_type === 'file';
       return {
         ...msg,
         content,
-        file_name: msg.message_type === 'file' ? content : null
+        file_id: msg.file_id || null,
+        file_name: isFile ? content || msg.db_file_name || null : null
       };
     });
 
