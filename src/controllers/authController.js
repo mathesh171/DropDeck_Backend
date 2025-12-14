@@ -4,10 +4,9 @@ const { generateAuthToken } = require('../utils/tokenGenerator')
 const { HTTP_STATUS } = require('../config/constants')
 const { logger } = require('../utils/logger')
 const User = require('../models/User')
-const { sendWelcomeEmail, sendVerificationEmail } = require('../services/emailService')
+const { sendWelcomeEmail, sendVerificationEmail, sendPasswordChangeEmail, sendPasswordResetOTPEmail } = require('../services/emailService')
 const path = require('path')
 const fs = require('fs')
-
 
 const register = async (req, res, next) => {
   try {
@@ -15,6 +14,10 @@ const register = async (req, res, next) => {
     const existingUser = await User.findByEmail(email)
     if (existingUser) {
       return res.status(HTTP_STATUS.CONFLICT).json({ error: 'Email already registered' })
+    }
+    const existingName = await User.findByName(name)
+    if (existingName) {
+      return res.status(HTTP_STATUS.CONFLICT).json({ error: 'Username already taken' })
     }
     const salt = await bcrypt.genSalt(10)
     const password_hash = await bcrypt.hash(password, salt)
@@ -45,7 +48,6 @@ const register = async (req, res, next) => {
     next(error)
   }
 }
-
 
 const login = async (req, res, next) => {
   try {
@@ -85,7 +87,6 @@ const login = async (req, res, next) => {
   }
 }
 
-
 const verifyEmail = async (req, res, next) => {
   try {
     const { token } = req.params
@@ -123,7 +124,6 @@ const verifyEmail = async (req, res, next) => {
   }
 }
 
-
 const resendVerification = async (req, res, next) => {
   try {
     const { email } = req.body
@@ -150,7 +150,6 @@ const resendVerification = async (req, res, next) => {
   }
 }
 
-
 const logout = async (req, res, next) => {
   try {
     logger.info(`User ${req.user.user_id} logged out`)
@@ -160,11 +159,10 @@ const logout = async (req, res, next) => {
   }
 }
 
-
 const getProfile = async (req, res, next) => {
   try {
     const userId = req.user.user_id
-    const [users] = await db.query('SELECT user_id, name, email, role, created_at, last_login, profilephoto FROM users WHERE user_id = ?', [userId])
+    const [users] = await db.query('SELECT user_id, name, email, role, created_at, last_login, profilephoto, bio FROM users WHERE user_id = ?', [userId])
     if (users.length === 0) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'User not found' })
     }
@@ -179,12 +177,40 @@ const getProfile = async (req, res, next) => {
   }
 }
 
-
 const updateProfile = async (req, res, next) => {
   try {
     const userId = req.user.user_id
-    const { name } = req.body
-    await db.query('UPDATE users SET name = ? WHERE user_id = ?', [name, userId])
+    const { name, bio } = req.body
+
+    if (name !== undefined) {
+      if (!name || name.trim().length < 3) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Username must be at least 3 characters' })
+      }
+      const [existingUser] = await db.query('SELECT user_id FROM users WHERE name = ? AND user_id != ?', [name.trim(), userId])
+      if (existingUser.length > 0) {
+        return res.status(HTTP_STATUS.CONFLICT).json({ error: 'Username already taken' })
+      }
+    }
+
+    const updates = []
+    const values = []
+
+    if (name !== undefined) {
+      updates.push('name = ?')
+      values.push(name.trim())
+    }
+    if (bio !== undefined) {
+      updates.push('bio = ?')
+      values.push(bio)
+    }
+
+    if (updates.length === 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'No fields to update' })
+    }
+
+    values.push(userId)
+    await db.query(`UPDATE users SET ${updates.join(', ')} WHERE user_id = ?`, values)
+    
     res.status(HTTP_STATUS.OK).json({ message: 'Profile updated successfully' })
   } catch (error) {
     logger.error('Update profile error:', error)
@@ -192,6 +218,26 @@ const updateProfile = async (req, res, next) => {
   }
 }
 
+const checkUsernameAvailability = async (req, res, next) => {
+  try {
+    const { username } = req.query
+    const userId = req.user.user_id
+
+    if (!username || username.trim().length < 3) {
+      return res.status(HTTP_STATUS.OK).json({ available: false, message: 'Username must be at least 3 characters' })
+    }
+
+    const [users] = await db.query('SELECT user_id FROM users WHERE name = ? AND user_id != ?', [username.trim(), userId])
+    
+    res.status(HTTP_STATUS.OK).json({ 
+      available: users.length === 0,
+      message: users.length === 0 ? 'Username available' : 'Username already taken'
+    })
+  } catch (error) {
+    logger.error('Check username error:', error)
+    next(error)
+  }
+}
 
 const uploadAvatar = async (req, res, next) => {
   try {
@@ -246,29 +292,140 @@ const uploadAvatar = async (req, res, next) => {
   }
 }
 
-
-const changePassword = async (req, res, next) => {
+const verifyOldPassword = async (req, res, next) => {
   try {
     const userId = req.user.user_id
-    const { currentPassword, newPassword } = req.body
+    const { oldPassword } = req.body
+
+    if (!oldPassword) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Old password is required' })
+    }
+
     const [users] = await db.query('SELECT password_hash FROM users WHERE user_id = ?', [userId])
     if (users.length === 0) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'User not found' })
     }
-    const isMatch = await bcrypt.compare(currentPassword, users[0].password_hash)
-    if (!isMatch) {
-      return res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Current password is incorrect' })
+
+    const isMatch = await bcrypt.compare(oldPassword, users[0].password_hash)
+    
+    res.status(HTTP_STATUS.OK).json({ 
+      verified: isMatch,
+      message: isMatch ? 'Password verified' : 'Incorrect password'
+    })
+  } catch (error) {
+    logger.error('Verify old password error:', error)
+    next(error)
+  }
+}
+
+const generatePasswordResetOTP = async (req, res, next) => {
+  try {
+    const userId = req.user.user_id
+
+    const [users] = await db.query('SELECT email, name FROM users WHERE user_id = ?', [userId])
+    if (users.length === 0) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'User not found' })
     }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+
+    await db.query('DELETE FROM password_reset_otps WHERE user_id = ?', [userId])
+    await db.query(
+      'INSERT INTO password_reset_otps (user_id, otp, expires_at) VALUES (?, ?, ?)',
+      [userId, otp, expiresAt]
+    )
+
+    await sendPasswordResetOTPEmail(users[0].email, users[0].name, otp)
+
+    logger.info(`Password reset OTP generated for user ${userId}`)
+    res.status(HTTP_STATUS.OK).json({ 
+      message: 'OTP sent to your email',
+      expires_in: '1 hour'
+    })
+  } catch (error) {
+    logger.error('Generate OTP error:', error)
+    next(error)
+  }
+}
+
+const verifyPasswordResetOTP = async (req, res, next) => {
+  try {
+    const userId = req.user.user_id
+    const { otp } = req.body
+
+    if (!otp || otp.length !== 6) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Invalid OTP format' })
+    }
+
+    const [otpRecords] = await db.query(
+      'SELECT * FROM password_reset_otps WHERE user_id = ? AND otp = ? AND is_used = 0 AND expires_at > NOW()',
+      [userId, otp]
+    )
+
+    if (otpRecords.length === 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Invalid or expired OTP' })
+    }
+
+    res.status(HTTP_STATUS.OK).json({ 
+      verified: true,
+      message: 'OTP verified successfully'
+    })
+  } catch (error) {
+    logger.error('Verify OTP error:', error)
+    next(error)
+  }
+}
+
+const changePassword = async (req, res, next) => {
+  try {
+    const userId = req.user.user_id
+    const { oldPassword, otp, newPassword } = req.body
+
+    if (!newPassword) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'New password is required' })
+    }
+
+    if (!oldPassword && !otp) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Either old password or OTP is required' })
+    }
+
+    const [users] = await db.query('SELECT email, name, password_hash FROM users WHERE user_id = ?', [userId])
+    if (users.length === 0) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'User not found' })
+    }
+
+    if (oldPassword) {
+      const isMatch = await bcrypt.compare(oldPassword, users[0].password_hash)
+      if (!isMatch) {
+        return res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Current password is incorrect' })
+      }
+    } else if (otp) {
+      const [otpRecords] = await db.query(
+        'SELECT * FROM password_reset_otps WHERE user_id = ? AND otp = ? AND is_used = 0 AND expires_at > NOW()',
+        [userId, otp]
+      )
+
+      if (otpRecords.length === 0) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Invalid or expired OTP' })
+      }
+
+      await db.query('UPDATE password_reset_otps SET is_used = 1 WHERE otp_id = ?', [otpRecords[0].otp_id])
+    }
+
     const salt = await bcrypt.genSalt(10)
     const newPasswordHash = await bcrypt.hash(newPassword, salt)
     await db.query('UPDATE users SET password_hash = ? WHERE user_id = ?', [newPasswordHash, userId])
-    res.status(HTTP_STATUS.OK).json({ message: 'Password changed successfully' })
+
+    await sendPasswordChangeEmail(users[0].email, users[0].name)
+
+    logger.info(`Password changed for user ${userId}`)
+    res.status(HTTP_STATUS.OK).json({ message: 'Password changed successfully. Confirmation email sent.' })
   } catch (error) {
     logger.error('Change password error:', error)
     next(error)
   }
 }
-
 
 const deleteAccount = async (req, res, next) => {
   try {
@@ -317,14 +474,17 @@ const deleteAccount = async (req, res, next) => {
   }
 }
 
-
 module.exports = {
   register,
   login,
   logout,
   getProfile,
   updateProfile,
+  checkUsernameAvailability,
   uploadAvatar,
+  verifyOldPassword,
+  generatePasswordResetOTP,
+  verifyPasswordResetOTP,
   changePassword,
   deleteAccount,
   verifyEmail,

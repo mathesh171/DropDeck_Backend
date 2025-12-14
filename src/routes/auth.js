@@ -9,7 +9,11 @@ const {
   logout,
   getProfile,
   updateProfile,
+  checkUsernameAvailability,
   uploadAvatar,
+  verifyOldPassword,
+  generatePasswordResetOTP,
+  verifyPasswordResetOTP,
   changePassword,
   deleteAccount,
   verifyEmail,
@@ -52,7 +56,6 @@ const avatarUpload = multer({
   fileFilter: avatarFileFilter
 });
 
-
 const registerValidators = [
   body('name').trim().isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),
   body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
@@ -60,20 +63,27 @@ const registerValidators = [
     .withMessage('Password must be at least 8 characters with uppercase, lowercase, and number'),
 ];
 
-
 const loginValidators = [
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty(),
 ];
 
+const passwordValidators = [
+  body('newPassword').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must be at least 8 characters with uppercase, lowercase, and number'),
+];
 
 router.post('/register', registerValidators, validate, register);
 router.post('/login', loginValidators, validate, login);
 router.post('/logout', authenticateToken, logout);
 router.get('/profile', authenticateToken, getProfile);
 router.put('/profile', authenticateToken, updateProfile);
+router.get('/check-username', authenticateToken, checkUsernameAvailability);
 router.post('/profile/avatar', authenticateToken, avatarUpload.single('avatar'), uploadAvatar);
-router.put('/change-password', authenticateToken, changePassword);
+router.post('/verify-old-password', authenticateToken, verifyOldPassword);
+router.post('/generate-password-otp', authenticateToken, generatePasswordResetOTP);
+router.post('/verify-password-otp', authenticateToken, verifyPasswordResetOTP);
+router.put('/change-password', authenticateToken, passwordValidators, validate, changePassword);
 router.delete('/account', authenticateToken, deleteAccount);
 router.get('/verify-email/:token', verifyEmail);
 router.post('/resend-verification', resendVerification);
@@ -89,6 +99,5 @@ router.get('/verify', authenticateToken, (req, res) => {
     }
   });
 });
-
 
 module.exports = router;
