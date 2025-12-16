@@ -20,10 +20,11 @@ app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://localhost:3000',
-    'https://dropdeck-chat.vercel.app'
+    'https://dropdeck-chat.netlify.app',
+    /\.ngrok-free\.dev$/
   ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
   credentials: true
 }));
 
@@ -38,7 +39,7 @@ app.use(helmet({
       connectSrc: [
         "'self'",
         "http://localhost:5000",
-        "https://dropdeck-chat.vercel.app"
+        "https://dropdeck-chat.netlify.app",
       ],
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
