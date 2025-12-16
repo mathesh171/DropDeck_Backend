@@ -31,7 +31,7 @@ const register = async (req, res, next) => {
     const { generateRandomToken } = require('../utils/tokenGenerator')
     const verificationToken = generateRandomToken(32)
     await User.setVerificationToken(userId, verificationToken)
-    const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`
+    const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`
     sendVerificationEmail(email, name, verificationToken)
     logger.info(`New user registered (unverified): ${email}`)
     res.status(HTTP_STATUS.CREATED).json({
@@ -168,7 +168,7 @@ const getProfile = async (req, res, next) => {
     }
     const user = users[0]
     if (user.profilephoto) {
-      user.avatar_url = `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/avatars/${user.profilephoto}`
+      user.avatar_url = `${process.env.BASE_URL}/uploads/avatars/${user.profilephoto}`
     }
     res.status(HTTP_STATUS.OK).json({ user })
   } catch (error) {
@@ -273,7 +273,7 @@ const uploadAvatar = async (req, res, next) => {
 
     await db.query('UPDATE users SET profilephoto = ? WHERE user_id = ?', [filename, userId])
 
-    const avatarUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/avatars/${filename}`
+    const avatarUrl = `${process.env.BASE_URL}/uploads/avatars/${filename}`
 
     logger.info(`Avatar uploaded for user ${userId}`)
     res.status(HTTP_STATUS.OK).json({ 
