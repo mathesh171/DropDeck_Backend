@@ -16,8 +16,8 @@ const adminRoutes = require('./routes/admin');
 
 const app = express();
 
-app.use(cors({
-  origin: (origin, callback) => {
+const corsOptions = {
+  origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:5173',
       'http://localhost:3000',
@@ -25,7 +25,7 @@ app.use(cors({
       process.env.FRONTEND_URL
     ];
 
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.ngrok-free.dev')) {
+    if (!origin || allowedOrigins.some(allowed => origin === allowed || origin.endsWith('.ngrok-free.dev'))) {
       callback(null, true);
     } else {
       callback(null, true);
@@ -34,10 +34,11 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
-}));
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  optionsSuccessStatus: 200
+};
 
-app.options('*', cors());
+app.use(cors(corsOptions));
 
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -77,6 +78,7 @@ app.use(helmet({
       connectSrc: [
         "'self'",
         "http://localhost:5000",
+        "http://localhost:5173",
         "https://dropdeck-chat.netlify.app",
         "https://uneffective-tetchily-axton.ngrok-free.dev"
       ],
@@ -86,7 +88,8 @@ app.use(helmet({
       frameSrc: ["'self'"]
     }
   },
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" }
 }));
 
 const limiter = rateLimit({
