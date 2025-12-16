@@ -63,7 +63,7 @@ const sendExportEmail = async (email, groupName, exportPath) => {
 };
 
 const sendVerificationEmail = async (email, name, token) => {
-  const verificationUrl = `http://localhost:5000/api/auth/verify-email/${token}`;
+  const verificationUrl = `${process.env.BASE_URL}/api/auth/verify-email/${token}`;
   
   const subject = 'Verify Your DropDeck Account';
   const html = `

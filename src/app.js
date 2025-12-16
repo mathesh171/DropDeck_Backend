@@ -22,79 +22,51 @@ const corsOptions = {
       'http://localhost:5173',
       'http://localhost:3000',
       'https://dropdeck-chat.netlify.app',
+      'https://uneffective-tetchily-axton.ngrok-free.dev', 
       process.env.FRONTEND_URL
     ];
-
-    if (!origin || allowedOrigins.some(allowed => origin === allowed || origin.endsWith('.ngrok-free.dev'))) {
+    
+    if (!origin || allowedOrigins.some(allowed => 
+      origin === allowed || origin.endsWith('.ngrok-free.dev')
+    )) {
       callback(null, true);
     } else {
-      callback(null, true);
+      callback(null, true); 
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  optionsSuccessStatus: 200
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
+
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, ngrok-skip-browser-warning');
-  
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
   next();
 }, express.static(path.join(__dirname, '../uploads')));
 
 app.use('/uploads/avatars', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, ngrok-skip-browser-warning');
-  
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
   next();
 }, express.static(path.join(__dirname, '../uploads/avatars')));
 
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      imgSrc: [
-        "'self'",
-        "data:",
-        "https://uneffective-tetchily-axton.ngrok-free.dev",
-        "http://localhost:5173"
-      ],
-      mediaSrc: ["'self'"],
-      connectSrc: [
-        "'self'",
-        "http://localhost:5000",
-        "http://localhost:5173",
-        "https://dropdeck-chat.netlify.app",
-        "https://uneffective-tetchily-axton.ngrok-free.dev"
-      ],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      fontSrc: ["'self'", "data:"],
-      frameSrc: ["'self'"]
-    }
-  },
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" }
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false
 }));
 
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW) * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS),
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW || 15) * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || 100),
   message: 'Too many requests from this IP, please try again later.'
 });
 

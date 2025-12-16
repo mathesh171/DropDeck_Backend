@@ -63,28 +63,6 @@ router.post('/:id/request', authenticateToken, async (req, res, next) => {
   }
 });
 
-router.get('/discover', authenticateToken, async (req, res, next) => {
-  try {
-    const userId = req.user.user_id;
-
-    const [groups] = await db.query(
-      `SELECT g.*
-       FROM chat_groups g
-       WHERE g.group_id NOT IN (
-         SELECT group_id FROM groupmembers WHERE user_id = ?
-       )
-       AND (g.access_type = 'public' OR g.access_type = 'approval')
-       AND g.expiry_time > NOW()
-       ORDER BY g.created_at DESC`,
-      [userId]
-    );
-
-    res.status(200).json({ groups });
-  } catch (error) {
-    next(error);
-  }
-});
-
 const {
   createGroup,
   getUserGroups,
@@ -113,12 +91,35 @@ router.post(
   validate,
   createGroup
 );
+
+router.get('/discover', authenticateToken, async (req, res, next) => {
+  try {
+    const userId = req.user.user_id;
+
+    const [groups] = await db.query(
+      `SELECT g.*
+       FROM chat_groups g
+       WHERE g.group_id NOT IN (
+         SELECT group_id FROM groupmembers WHERE user_id = ?
+       )
+       AND (g.access_type = 'public' OR g.access_type = 'approval')
+       AND g.expiry_time > NOW()
+       ORDER BY g.created_at DESC`,
+      [userId]
+    );
+
+    res.status(200).json({ groups });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/', authenticateToken, getUserGroups);
 router.get('/:id', authenticateToken, authorizeGroupMember, getGroupDetails);
 router.patch('/:id/extend', authenticateToken, authorizeGroupAdmin, extendGroupExpiry);
 router.delete('/:id', authenticateToken, authorizeGroupAdmin, deleteGroup);
 router.post(
-  '//:id/invite',
+  '/:id/invite',
   authenticateToken,
   authorizeGroupAdmin,
   body('email').isEmail(),
